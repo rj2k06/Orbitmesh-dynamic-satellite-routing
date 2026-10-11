@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07111a">
+<title>OrbitMesh Pro — Dynamic Satellite Routing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark"><span>OM</span></div>
+      <div>
+        <div class="brand-name">ORBIT<span>MESH</span></div>
+        <div class="brand-sub">DYNAMIC SATELLITE ROUTING LAB</div>
+      </div>
+    </div>
+
+    <div class="mission-strip">
+      <div class="status-pill"><i id="apiDot" class="api-dot"></i><span id="apiText">API CONNECTING</span></div>
+      <div class="status-pill"><i class="pulse-dot"></i><span id="simState">LIVE SIMULATION</span></div>
+      <div class="clock" id="clock">00:00:00</div>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <aside class="control-panel">
+      <div class="panel-label">ROUTING CONTROL</div>
+
+      <div class="control-card">
+        <div class="control-heading"><span>01</span><div><b>Mission endpoints</b><small>Choose the communicating assets</small></div></div>
+
+        <label for="source">SOURCE SATELLITE</label>
+        <select id="source"></select>
+
+        <div class="route-arrow">↓</div>
+
+        <label for="destination">DESTINATION STATION</label>
+        <select id="destination"></select>
+
+        <button id="route" class="btn btn-primary btn-wide">
+          <span>CALCULATE ROUTE</span><b>↗</b>
+        </button>
+      </div>
+
+      <div class="control-card">
+        <div class="control-heading"><span>02</span><div><b>Optimization model</b><small>Define what “best path” means</small></div></div>
+
+        <label for="algorithm">ROUTING ALGORITHM</label>
+        <select id="algorithm">
+          <option value="dijkstra">Dijkstra — exact weighted path</option>
+          <option value="astar">A* — heuristic pathfinding</option>
+          <option value="bellman">Bellman-Ford — repeated relaxation</option>
+          <option value="floyd">Floyd-Warshall — all-pairs DP</option>
+          <option value="genetic">Genetic — metaheuristic search</option>
+        </select>
+
+        <div class="weight-head"><span>OBJECTIVE WEIGHTS</span><b id="weightTotal">100%</b></div>
+
+        <div class="weight-control">
+          <div><span>Latency</span><b id="latencyV">50%</b></div>
+          <input id="latency" type="range" min="0" max="100" value="50">
+        </div>
+        <div class="weight-control">
+          <div><span>Congestion</span><b id="congestionV">30%</b></div>
+          <input id="congestion" type="range" min="0" max="100" value="30">
+        </div>
+        <div class="weight-control">
+          <div><span>Energy</span><b id="energyV">20%</b></div>
+          <input id="energy" type="range" min="0" max="100" value="20">
+        </div>
+
+        <button id="normalize" class="btn btn-ghost btn-wide">NORMALIZE TO 100%</button>
+      </div>
+
+      <div class="control-card incident-card">
+        <div class="control-heading"><span>03</span><div><b>Resilience testing</b><small>Inject failures and network events</small></div></div>
+        <div class="event-grid">
+          <button data-event="fail_satellite" class="event-btn"><strong>✦</strong><span>Satellite<br>failure</span></button>
+          <button data-event="fail_link" class="event-btn"><strong>⌁</strong><span>Link<br>failure</span></button>
+          <button data-event="weather" class="event-btn"><strong>☁</strong><span>Weather<br>event</span></button>
+          <button data-event="congestion" class="event-btn"><strong>≋</strong><span>Traffic<br>surge</span></button>
+        </div>
+        <div class="incident-actions">
+          <button id="recover" class="btn btn-recover">RESTORE NETWORK</button>
+          <button id="reset" class="btn btn-ghost">RESET</button>
+        </div>
+      </div>
+
+      <div class="simulation-note">
+        <div class="note-icon">i</div>
+        <div><b>Simulation environment</b><p>Orbital positions, link conditions and failures are modeled for algorithm analysis. No real spacecraft are controlled.</p></div>
+      </div>
+    </aside>
+
+    <main class="content">
+
+      <section class="hero-row">
+        <div>
+          <div class="eyebrow">MISSION CONTROL / DYNAMIC GRAPH</div>
+          <h1>Constellation Routing <span>Workbench</span></h1>
+          <p>Watch a weighted satellite network evolve in real time and see the shortest path respond to changing link conditions.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="pause" class="btn btn-ghost">Ⅱ&nbsp; PAUSE</button>
+          <button id="step" class="btn btn-ghost">STEP&nbsp; →</button>
+        </div>
+      </section>
+
+      <section class="network-card">
+        <div class="network-toolbar">
+          <div class="toolbar-left">
+            <div class="live-label"><i class="pulse-dot"></i> LIVE TOPOLOGY</div>
+            <div class="toolbar-divider"></div>
+            <span>60 satellites · 5 ground stations</span>
+          </div>
+          <div class="toolbar-right">
+            <span class="tick-label">SIMULATION TIME</span>
+            <strong>T+<b id="simTick">0000</b></strong>
+          </div>
+        </div>
+
+        <div class="network-stage">
+          <canvas id="canvas"></canvas>
+          <div class="map-corner corner-tl"><span class="map-tag">ORBITAL GRAPH</span><span>LINKS = ACTIVE EDGES</span></div>
+          <div class="map-corner corner-tr"><span class="network-state-dot"></span><span id="missionStatus">NETWORK NOMINAL</span></div>
+
+          <div class="map-legend">
+            <span><i class="legend-sat"></i> Satellite</span>
+            <span><i class="legend-ground"></i> Ground station</span>
+            <span><i class="legend-route"></i> Selected route</span>
+          </div>
+
+          <div class="route-change-banner" id="toast"></div>
+        </div>
+      </section>
+
+      <section class="metric-grid">
+        <article class="metric-card">
+          <div class="metric-icon cyan">↯</div>
+          <div><span>ROUTE LATENCY</span><strong id="latencyM">—</strong><small>estimated end-to-end delay</small></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-icon blue">⇄</div>
+          <div><span>BOTTLENECK</span><strong id="bandwidthM">—</strong><small>effective path bandwidth</small></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-icon green">✓</div>
+          <div><span>RELIABILITY</span><strong id="reliabilityM">—</strong><small>combined path estimate</small></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-icon amber">◈</div>
+          <div><span>ENERGY COST</span><strong id="energyM">—</strong><small>relative transmission units</small></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-icon violet">#</div>
+          <div><span>HOPS</span><strong id="hopsM">—</strong><small>intermediate communication links</small></div>
+        </article>
+      </section>
+
+      <section class="analysis-grid">
+        <article class="surface route-surface">
+          <div class="surface-head">
+            <div>
+              <div class="eyebrow">DECISION TRACE</div>
+              <h2>Selected route</h2>
+            </div>
+            <span id="algoBadge" class="algorithm-badge">—</span>
+          </div>
+
+          <div class="route-summary">
+            <div class="route-status"><i></i><span>ACTIVE OPTIMAL PATH</span></div>
+            <div id="routePath" class="route-path">Choose endpoints and calculate a route.</div>
+          </div>
+
+          <div class="algorithm-explanation" id="explain">
+            <h3>How the algorithm decides</h3>
+            <p>Select a routing method to see its DAA explanation.</p>
+          </div>
+
+          <div class="detail-grid">
+            <div><span>WEIGHTED COST</span><b id="cost">—</b></div>
+            <div><span>COMPUTE TIME</span><b id="compute">—</b></div>
+            <div><span>ACTIVE NODES</span><b id="nodes">—</b></div>
+            <div><span>ACTIVE LINKS</span><b id="links">—</b></div>
+          </div>
+        </article>
+
+        <article class="surface benchmark-surface">
+          <div class="surface-head">
+            <div>
+              <div class="eyebrow">ALGORITHM LAB</div>
+              <h2>Method comparison</h2>
+            </div>
+            <button id="benchmark" class="btn btn-primary">RUN BENCHMARK</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Method</th><th>Cost</th><th>Time</th><th>Hops</th><th>Classification</th></tr></thead>
+              <tbody id="benchBody"><tr><td colspan="5" class="empty-table">Run a benchmark to compare algorithms on the current graph.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-note">Same graph · same source/destination · same objective weights.</div>
+        </article>
+      </section>
+
+      <section class="telemetry-grid">
+        <article class="surface">
+          <div class="surface-head compact">
+            <div><div class="eyebrow">LINK TELEMETRY</div><h2>Congestion hotspots</h2></div>
+            <span class="live-chip">LIVE</span>
+          </div>
+          <div id="telemetry" class="telemetry"></div>
+        </article>
+
+        <article class="surface">
+          <div class="surface-head compact">
+            <div><div class="eyebrow">RESILIENCE LOG</div><h2>Event history</h2></div>
+            <button id="clearLog" class="btn btn-ghost btn-small">CLEAR</button>
+          </div>
+          <div id="log" class="log"></div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <span>ORBITMESH PRO · DAA DYNAMIC ROUTING SIMULATOR</span>
+        <span>Weighted graph · Shortest path · Fault tolerance · Live simulation</span>
+      </footer>
+    </main>
+
+    <aside class="insight-panel">
+      <div class="insight-title">NETWORK HEALTH</div>
+      <div class="health-card">
+        <div class="health-ring"><div><strong id="health">100%</strong><span>HEALTH</span></div></div>
+        <div class="health-copy"><b>Constellation status</b><span>Availability of active assets</span></div>
+      </div>
+
+      <div class="health-stats">
+        <div><span>Satellites</span><b id="satCount">—</b></div>
+        <div><span>Ground stations</span><b id="groundCount">—</b></div>
+        <div><span>Active links</span><b id="linkCount">—</b></div>
+      </div>
+
+      <div class="insight-section">
+        <div class="insight-title">HOW TO READ THE MODEL</div>
+        <div class="definition">
+          <span class="def-icon cyan">τ</span>
+          <div><b>Latency</b><p>Transmission delay contributes directly to edge cost.</p></div>
+        </div>
+        <div class="definition">
+          <span class="def-icon amber">≋</span>
+          <div><b>Congestion</b><p>Busy links receive a higher routing penalty.</p></div>
+        </div>
+        <div class="definition">
+          <span class="def-icon violet">◈</span>
+          <div><b>Energy</b><p>Relative transmission energy affects the objective.</p></div>
+        </div>
+        <div class="definition">
+          <span class="def-icon green">✓</span>
+          <div><b>Reliability</b><p>Path reliability combines the reliability of its links.</p></div>
+        </div>
+      </div>
+
+      <div class="current-incident">
+        <div class="insight-title">CURRENT EVENT</div>
+        <div id="currentEvent" class="incident-box">
+          <i class="incident-dot"></i>
+          <span>No active incident.</span>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
